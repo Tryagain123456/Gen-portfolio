@@ -1,4 +1,3 @@
-
 import sys, os
 
 # 自动添加项目根目录到 sys.path
@@ -6,9 +5,15 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 from langchain_core.messages import HumanMessage
-from src.agents.state import AgentState, show_agent_reasoning, show_workflow_status
-from src.tools.api import get_financial_metrics, get_financial_statements, get_market_data, get_price_history
+# from src.agents.state import AgentState, show_agent_reasoning, show_workflow_status
+# from src.tools.api import get_financial_metrics, get_financial_statements, get_market_data, get_price_history
+# from src.utils.logging_config import setup_logger
+
+
+from .state import AgentState, show_agent_reasoning, show_workflow_status
+from src.tools.api import get_financial_metrics, get_financial_statements, get_price_history
 from src.utils.logging_config import setup_logger
+
 
 from datetime import datetime, timedelta
 import pandas as pd
@@ -58,15 +63,22 @@ def market_data_agent(state: AgentState)-> dict:
     except Exception as e:
         logger.error(f"获取财务指标失败: {str(e)}")
         financial_metrics = {}
+
     ## 财务报表数据
     try:
         financial_line_items = get_financial_statements(ticker)
     except Exception as e:
         logger.error(f"获取财务报表失败: {str(e)}")
         financial_line_items = {}
-    ## 市场数据
+
+    # ## 市场数据单独取出来
     try:
-        market_data = get_market_data(ticker)
+        market_data ={
+        "market_cap":  financial_metrics[0]["market_cap"],
+        "float_market_cap":  financial_metrics[0]["float_market_cap"],
+        "general_capital":  financial_metrics[0]["general_capital"],
+        "float_capital":  financial_metrics[0]["float_capital"],
+        }
     except Exception as e:
         logger.error(f"获取市场数据失败: {str(e)}")
         market_data = {"market_cap": 0}
@@ -80,7 +92,7 @@ def market_data_agent(state: AgentState)-> dict:
             "price_history": len(prices_dict) > 0,
             "financial_metrics": len(financial_metrics) > 0,
             "financial_statements": len(financial_line_items) > 0,
-            "market_data": len(market_data) > 0
+            # "market_data": len(market_data) > 0
         },
         "summary": f"为{ticker}收集了从{start_date}到{end_date}的市场数据，包括价格历史、财务指标和市场信息"
     }

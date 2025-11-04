@@ -62,7 +62,7 @@ def run_hedge_fund(
             "num_of_news": 100,
         },
         "metadata": {
-            "show_reasoning": False,
+            "show_reasoning": True,
             "run_id": run_id,
             "show_summary": True
         }
@@ -152,15 +152,24 @@ app = workflow.compile()
 
 # ======================================================================================
 
-
+import getpass
+import uuid
 # --- Main Execution Block ---
 if __name__ == "__main__":
+    def _set_if_undefined(var: str):
+        if not os.environ.get(var):
+            os.environ[var] = getpass.getpass(f"Please provide your {var}")
 
+
+    # (设置您的 API 密钥)
+    _set_if_undefined("BYTEDANCE_API_KEY")
+    _set_if_undefined("TAVILY_API_KEY")
+    _set_if_undefined("LANGSMITH_API_KEY")
     class Args:
         def __init__(self):
-            self.user_input = "我想看看宁德时代是否值得投资"
-            self.initial_capital = 100000.0
-            self.initial_position = 0
+            self.user_input = "我想看看比亚迪是否值得投资"
+            self.initial_capital = 1000000.0
+            self.initial_position = 1000
     args = Args()
 
     # 获取当前时间（分析基于前一天时间进行，保证end_data的数据具有完整性，start_data默认为一年前）

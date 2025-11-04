@@ -17,7 +17,7 @@ def fundamentals_agent(state: AgentState):
     show_reasoning = state["metadata"]["show_reasoning"]
 
     # 2. 数据获取
-    data = state["data"] # 日期
+    data = state["data"]
     metrics = data["financial_metrics"][0] # 财务数据
 
     # 3. 初始化存储变量：signals存各维度的分析结果，reasoning存详细推理过程
