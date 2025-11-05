@@ -121,7 +121,7 @@ workflow.add_edge("market_data_agent", "technical_analyst_agent")
 workflow.add_edge("market_data_agent", "fundamentals_agent")
 workflow.add_edge("market_data_agent", "sentiment_agent")
 workflow.add_edge("market_data_agent", "valuation_agent")
-workflow.add_edge("market_data_agent", "macro_news_agent")
+workflow.add_edge("market_data_agent", "macro_analyst_agent")
 
 
 # 2. 将4个初步分析计算结果汇总后，分别传递给【多头研究员】和【空头研究员】
@@ -139,10 +139,10 @@ workflow.add_edge(["researcher_bull_agent", "researcher_bear_agent"], "debate_ro
 
 # 4. 辩论时整合后依次通过【风险管理智能体】和【宏观分析智能体】进行分析
 workflow.add_edge("debate_room_agent", "risk_management_agent")
-workflow.add_edge("risk_management_agent", "macro_analyst_agent")
+# workflow.add_edge("risk_management_agent", "macro_analyst_agent")
 
-# 5. 将新闻分析和宏观数据分析汇总后传给【资产组合经理】生成报告
-workflow.add_edge(["macro_analyst_agent", "macro_news_agent"], "portfolio_management_agent")
+# 5. 将风险分析和整个市场宏观数据分析汇总后传给【资产组合经理】生成报告
+workflow.add_edge(["risk_management_agent", "macro_news_agent"], "portfolio_management_agent")
 
 # 6. 终点为生成投资建议的【资产组合经理】
 workflow.add_edge("portfolio_management_agent", END)
