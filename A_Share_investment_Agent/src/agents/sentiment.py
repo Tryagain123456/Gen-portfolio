@@ -44,9 +44,9 @@ def sentiment_agent(state: AgentState):
         else:
             # 如果没有publish_time字段，默认包含这条新闻
             recent_news.append(news)
-
+    logger.info(f"大模型开始对最近的新闻进行情感分析")
     sentiment_score = get_news_sentiment(recent_news, num_of_news=num_of_news) # 调用大模型给出情感分数
-
+    logger.info(f"得到的情感分析分数 ：{sentiment_score}")
     # 根据情感分数生成交易信号和置信度
     if sentiment_score >= 0.5:
         signal = "bullish"

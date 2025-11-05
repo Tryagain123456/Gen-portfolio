@@ -586,7 +586,7 @@ def get_financial_statements(symbol: str) -> Dict[str, Any]:
         }
         return [default_item, default_item]
 
-#
+
 # def get_market_data(symbol: str) -> Dict[str, Any]:
 #     """获取市场数据"""
 #     logger.info(f"获取股票代码为 {symbol} 的市值数据...")
