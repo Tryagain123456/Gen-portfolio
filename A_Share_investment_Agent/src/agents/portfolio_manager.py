@@ -222,17 +222,7 @@ def portfolio_management_agent(state: AgentState):
     """Responsible for portfolio management"""
     agent_name = "portfolio_management_agent"
     show_workflow_status("Portfolio Management Agent")
-    # logger.info(f"\n--- DEBUG: {agent_name} START ---")
 
-    # Log raw incoming messages
-    # logger.info(
-    # f"--- DEBUG: {agent_name} RAW INCOMING messages: {[msg.name for msg in state['messages']]} ---")
-    # for i, msg in enumerate(state['messages']):
-    #     logger.info(
-    #         f"  DEBUG RAW MSG {i}: name='{msg.name}', content_preview='{str(msg.content)[:100]}...'")
-
-    # Clean and unique messages by agent name, taking the latest if duplicates exist
-    # This is crucial because this agent is a sink for multiple paths.
     unique_incoming_messages = {}
     for msg in state["messages"]:
         # Keep overriding with later messages to get the latest by name
@@ -293,6 +283,8 @@ def portfolio_management_agent(state: AgentState):
 1. 估值分析（30%权重）
 2. 基本面分析（25%权重）
 3. 技术分析（20%权重）
+   a) 技术分析信号（来自技术分析师代理）
+   b) 股票价格预测（来自股票预测代理）
 4. 宏观分析（15%权重）- 包含两个输入：
    a) 总体宏观环境（来自宏观分析师代理，基于工具分析）
    b) 每日市场新闻摘要（来自宏观新闻代理）
@@ -343,6 +335,7 @@ def portfolio_management_agent(state: AgentState):
     user_message_content = f"""基于下面的团队分析结果, 做出投资决策.
     
             Technical Analysis Signal: {technical_content}
+            Stock Price Forecast: {state["data"].get("predicted_price_data", "未提供股票价格预测结果")}
             Fundamental Analysis Signal: {fundamentals_content}
             Sentiment Analysis Signal: {sentiment_content}
             Valuation Analysis Signal: {valuation_content}
@@ -387,7 +380,7 @@ def portfolio_management_agent(state: AgentState):
     final_report_content = ""
     try:
 
-        decision_json = json.loads(llm_response_content)
+        decision_json = json.loads(llm_response_content) # type: ignore
 
         reasoning_text = decision_json.get("reasoning") or ""  # "or" 会处理 None 和 ""
         agent_decision_details_value = {
@@ -423,7 +416,7 @@ def portfolio_management_agent(state: AgentState):
         logger.error(f"无法解析或处理 portfolio_manager 的 LLM 响应: {e}")
         agent_decision_details_value = {
             "error": f"处理 LLM 决策时出错: {e}",
-            "raw_response_snippet": llm_response_content[:200] + "..."
+            "raw_response_snippet": llm_response_content[:200] + "..." # type: ignore
         }
         final_report_content = f"LLM 响应处理失败 (错误: {e})：\n{llm_response_content}"
 

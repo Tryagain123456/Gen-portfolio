@@ -31,11 +31,8 @@ logger.info(f"{SUCCESS_ICON} 环境变量 BYTEDANCE_API_KEY 加载成功")
 # ========== 初始化 LLM ==========
 llm = ChatOpenAI(
     model = BYTEDANCE_MODEL,
-    # model="doubao-seed-1-6-250615",
     api_key = SecretStr(BYTEDANCE_API_KEY),
-    # api_key = "537778ec-61bd-435f-9d21-ff4b4af3afa4",
     base_url = BYTEDANCE_BASE_URL,
-    # base_url="https://ark.cn-beijing.volces.com/api/v3",
     timeout=180
 )
 logger.info(f"{SUCCESS_ICON} ChatOpenAI(Doubao) 模型初始化成功")

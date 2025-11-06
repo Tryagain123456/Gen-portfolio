@@ -1,108 +1,175 @@
-from langchain_core.messages import HumanMessage
-from src.agents.state import AgentState, show_agent_reasoning, show_workflow_status
-
 import json
 import ast
+import logging
+from typing import Literal # 导入日志
+from langchain_core.messages import HumanMessage, AIMessage # 导入 AIMessage
+from src.agents.state import AgentState, show_agent_reasoning, show_workflow_status
+from src.tools.openrouter_config import get_chat_completion,llm
+
+# 设置日志
+logger = logging.getLogger(__name__)
 
 
-#"researcher_bear", "空方研究员，从看空角度分析市场数据并提出风险警示")
+class BearishAnalysisOutput:
+    perspective: Literal["bearish"]
+    confidence: float
+    thesis_points: list[str]
+    reasoning: str
+
+# "researcher_bear", "空方研究员，从看空角度分析市场数据并提出风险警示")
 def researcher_bear_agent(state: AgentState):
-    """Analyzes signals from a bearish perspective and generates cautionary investment thesis."""
-    show_workflow_status("Bearish Researcher")
+    """
+    (已更新: LLM-based)
+    从看空角度分析所有信号 (包括预测数据)，并生成谨慎的投资论点。
+    """
+    show_workflow_status("Bearish Researcher (LLM)")
     show_reasoning = state["metadata"]["show_reasoning"]
-
-    # Fetch messages from analysts
-    technical_message = next(
-        msg for msg in state["messages"] if msg.name == "technical_analyst_agent")
-    fundamentals_message = next(
-        msg for msg in state["messages"] if msg.name == "fundamentals_agent")
-    sentiment_message = next(
-        msg for msg in state["messages"] if msg.name == "sentiment_agent")
-    valuation_message = next(
-        msg for msg in state["messages"] if msg.name == "valuation_agent")
-
+    
+    # -----------------------------------------------------------------
+    # 1. (保留) 获取上游分析师数据
+    # -----------------------------------------------------------------
     try:
-        fundamental_signals = json.loads(fundamentals_message.content)
-        technical_signals = json.loads(technical_message.content)
-        sentiment_signals = json.loads(sentiment_message.content)
-        valuation_signals = json.loads(valuation_message.content)
+        technical_message = next(
+            msg for msg in state["messages"] if msg.name == "technical_analyst_agent")
+        fundamentals_message = next(
+            msg for msg in state["messages"] if msg.name == "fundamentals_agent")
+        sentiment_message = next(
+            msg for msg in state["messages"] if msg.name == "sentiment_agent")
+        valuation_message = next(
+            msg for msg in state["messages"] if msg.name == "valuation_agent")
+            
+        fundamental_signals = json.loads(fundamentals_message.content) # type: ignore
+        technical_signals = json.loads(technical_message.content) # type: ignore
+        sentiment_signals = json.loads(sentiment_message.content) # type: ignore
+        valuation_signals = json.loads(valuation_message.content) # type: ignore
+        
     except Exception as e:
-        fundamental_signals = ast.literal_eval(fundamentals_message.content)
-        technical_signals = ast.literal_eval(technical_message.content)
-        sentiment_signals = ast.literal_eval(sentiment_message.content)
-        valuation_signals = ast.literal_eval(valuation_message.content)
+        logger.warning(f"解析上游分析师数据失败: {e}，尝试 ast.literal_eval...")
+        try:
+            fundamental_signals = ast.literal_eval(fundamentals_message.content) # type: ignore
+            technical_signals = ast.literal_eval(technical_message.content) # type: ignore
+            sentiment_signals = ast.literal_eval(sentiment_message.content) # type: ignore
+            valuation_signals = ast.literal_eval(valuation_message.content) # type: ignore
+        except Exception as e_ast:
+            msg = f"❌ 无法解析上游分析师信号: {e_ast}"
+            logger.error(msg)
+            state["messages"].append(AIMessage(content=msg, name="researcher_bear_agent")) # type: ignore
+            return state
 
-    # Analyze from bearish perspective
-    bearish_points = []
-    confidence_scores = []
-
-    # Technical Analysis
-    if technical_signals["signal"] == "bearish":
-        bearish_points.append(
-            f"Technical indicators show bearish momentum with {technical_signals['confidence']} confidence")
-        confidence_scores.append(
-            float(str(technical_signals["confidence"]).replace("%", "")) / 100)
+    # -----------------------------------------------------------------
+    # 2. (新增) 获取 AI 预测数据
+    # -----------------------------------------------------------------
+    prediction_analysis = state["data"].get("prediction_analysis")
+    prediction_context = ""
+    
+    if prediction_analysis:
+        # 我们只提取最关键的摘要信息，而不是整个字典，以节省 Token
+        summary_table = prediction_analysis.get("summary_table", {})
+        text_report = prediction_analysis.get("text_report", "No text report available.")
+        
+        prediction_context = f"""
+        5.  **AI模型时间序列预测 (Kronos Forecast)**:
+            -   **摘要表 (Summary Table)**: {json.dumps(summary_table)}
+            -   **文本报告 (Text Report)**: "{text_report}"
+        """
     else:
-        bearish_points.append(
-            "技术性反弹可能是暂时的，暗示可能出现反转")
-        confidence_scores.append(0.3)
+        prediction_context = "5.  **AI模型时间序列预测 (Kronos Forecast)**: 未提供数据。"
+        
+    # -----------------------------------------------------------------
+    # 3. (核心) 定义 LLM Prompt 来取代规则
+    # -----------------------------------------------------------------
+    
+    system_prompt = f"""
+    你是一个专业的、持极度悲观态度的股票分析师（空方研究员）。
+    你的唯一任务是审查所有输入的数据，并**只从看空（Bearish）的角度**进行解读。
 
-    # Fundamental Analysis
-    if fundamental_signals["signal"] == "bearish":
-        bearish_points.append(
-            f"Concerning fundamentals with {fundamental_signals['confidence']} confidence")
-        confidence_scores.append(
-            float(str(fundamental_signals["confidence"]).replace("%", "")) / 100)
-    else:
-        bearish_points.append(
-            "基本面优势不可持续")
-        confidence_scores.append(0.3)
+    你的职责：
+    1.  **放大负面信号**：如果数据（如技术、估值）是负面的，你要猛烈抨击它们。
+    2.  **淡化正面信号**：如果数据（如基本面、情绪）是正面的，你必须将其解读为“不可持续的泡沫”、“陷阱”、“市场非理性”或“诱多的陷阱”。
+    3.  **寻找预测中的风险**：从 `Kronos Forecast` 数据中找出风险点。
+        -   如果它建议 `reduce` (减仓) 或 `defensive` (防御)，你要强调这是 AI 发出的明确卖出信号。
+        -   如果它预测高收益 (如 `annualized_return: 101.04%`)，你必须指出这伴随着极高的波动 (`annualized_vol: 51.79%`) 和巨大的回撤 (`max_drawdown: -13.30%`)，称之为“高风险的赌博”。
+        -   指出宽的置信区间 (CI) 意味着“极度的不确定性”。
+    4.  **提供结构化输出**：你必须严格按照指定的JSON格式返回你的分析。
+    """
 
-    # Sentiment Analysis
-    if sentiment_signals["signal"] == "bearish":
-        bearish_points.append(
-            f"Negative market sentiment with {sentiment_signals['confidence']} confidence")
-        confidence_scores.append(
-            float(str(sentiment_signals["confidence"]).replace("%", "")) / 100)
-    else:
-        bearish_points.append(
-            "市场情绪过于乐观")
-        confidence_scores.append(0.3)
+    user_prompt = f"""
+    请分析以下关于某只股票的5个综合数据源，并提供你的**看空分析报告**。
 
-    # Valuation Analysis
-    if valuation_signals["signal"] == "bearish":
-        bearish_points.append(
-            f"Stock appears overvalued with {valuation_signals['confidence']} confidence")
-        confidence_scores.append(
-            float(str(valuation_signals["confidence"]).replace("%", "")) / 100)
-    else:
-        bearish_points.append(
-            "当前估值未反映下行风险")
-        confidence_scores.append(0.3)
+    **输入数据源：**
 
-    # Calculate overall bearish confidence
-    avg_confidence = sum(confidence_scores) / len(confidence_scores)
+    1.  **基本面分析 (Fundamentals)**: {json.dumps(fundamental_signals)}
+    2.  **技术分析 (Technical)**: {json.dumps(technical_signals)}
+    3.  **市场情绪 (Sentiment)**: {json.dumps(sentiment_signals)}
+    4.  **估值分析 (Valuation)**: {json.dumps(valuation_signals)}
+    {prediction_context}
 
-    message_content = {
-        "perspective": "bearish",
-        "confidence": avg_confidence,
-        "thesis_points": bearish_points,
-        "reasoning": "基于对技术面、基本面、市场情绪和估值因素的综合分析得出的看空论点"
-    }
+    **你的任务：**
+    基于上述所有信息，生成一份看空报告。记住，即使所有信号都看涨，你也要找出潜在的“非理性繁荣”或“最后的疯狂”。
 
+    **输出格式 (必须严格遵守此JSON结构)：**
+    {{
+      "perspective": "bearish",
+      "confidence": <一个0.0到1.0之间的浮点数，表示你对看空观点的信心>,
+      "thesis_points": [
+        "<看空论点1，基于一个数据点>",
+        "<看空论点2，基于另一个数据点>",
+        "<看空论点3，(重点) 综合 AI 预测数据中的风险点>"
+      ],
+      "reasoning": "<一个字符串，总结你为什么得出这些看空结论>"
+    }}
+    """
+    
+    # -----------------------------------------------------------------
+    # 4. (核心) 调用 LLM 并解析结果
+    # -----------------------------------------------------------------
+    try:
+        # 调用大模型
+  
+        structured_llm = llm.with_structured_output(BearishAnalysisOutput)
+        structured_llm_response = structured_llm.invoke(input=[system_prompt,user_prompt])
+
+        if show_reasoning:
+            show_agent_reasoning(f"LLM Raw Response:\n{structured_llm_response}", "Bearish Researcher (LLM)")
+
+        # 确保 LLM 遵守了指令
+        structured_llm_response["perspective"] = "bearish"
+
+    except Exception as e:
+        logger.error(f"Bearish Researcher LLM 失败或解析JSON错误: {e}")
+        # (回退机制) 如果 LLM 失败，返回一个通用的错误信息
+        structured_llm_response = {
+            "perspective": "bearish",
+            "confidence": 0.5,
+            "thesis_points": [
+                f"LLM 分析失败: {str(e)}",
+                "由于系统分析模块出现故障，无法评估风险。",
+                "建议采取极度谨慎的防御姿态。"
+            ],
+            "reasoning": "LLM alysis failed or returned invalid JSON. Defaulting to maximum caution."
+        }
+
+    # -----------------------------------------------------------------
+    # 5. (保留) 封装并返回状态
+    # -----------------------------------------------------------------
     message = HumanMessage(
-        content=json.dumps(message_content),
+        content=json.dumps(structured_llm_response),
         name="researcher_bear_agent",
     )
 
     if show_reasoning:
-        show_agent_reasoning(message_content, "Bearish Researcher")
+        show_agent_reasoning(structured_llm_response, "Bearish Researcher")
         # 保存推理信息到metadata供API使用
-        state["metadata"]["agent_reasoning"] = message_content
+        state["metadata"]["agent_reasoning"] = structured_llm_response
 
     show_workflow_status("Bearish Researcher", "completed")
+    
+    # 返回 state 时要确保 state["messages"] 确实被更新了
+    current_messages = state.get("messages", [])
+    current_messages.append(message) # type: ignore
+    
     return {
-        "messages": state["messages"] + [message],
+        "messages": current_messages,
         "data": state["data"],
         "metadata": state["metadata"],
     }

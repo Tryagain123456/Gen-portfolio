@@ -1,4 +1,91 @@
 
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+import json
+from src.utils.logging_config import setup_logger
+
+from src.agents.state import AgentState, show_agent_reasoning, show_workflow_status
+from src.tools.openrouter_config import get_chat_completion
+
+# 初始化 logger
+logger = setup_logger('portfolio_management_agent')
+
+# (可以放在 portfolio_manager.py 的顶部)
+import numpy as np
+import collections.abc  # 用于更稳健的 dict/list 检查
+
+
+def convert_numpy_types(data):
+    """
+    递归地将所有 numpy 类型、不可序列化对象转换为 Python 原生类型。
+    支持 dict、list、tuple、set、LangChain Message 等。
+    """
+    import numpy as np
+    import collections.abc
+
+    if isinstance(data, collections.abc.Mapping):
+        return {k: convert_numpy_types(v) for k, v in data.items()}
+
+    elif isinstance(data, (list, tuple, set)):
+        # tuple/set也处理掉
+        return [convert_numpy_types(v) for v in data]
+
+    elif isinstance(data, np.generic):
+        # ✅ 统一转换所有 numpy 标量（float64, int64, bool_等）
+        return data.item()
+
+    elif isinstance(data, np.ndarray):
+        return [convert_numpy_types(x) for x in data.tolist()]
+
+    elif hasattr(data, "__dict__"):
+        # ✅ 处理 LangChain Message、Pydantic、dataclass 等
+        return convert_numpy_types(vars(data))
+
+    elif hasattr(data, "_asdict"):
+        # ✅ namedtuple
+        return convert_numpy_types(data._asdict())
+
+    elif isinstance(data, (float, int, str, bool)) or data is None:
+        return data
+
+    else:
+        try:
+            json.dumps(data)
+            return data
+        except Exception:
+            return str(data)
+
+##### Portfolio Management Agent #####
+def get_latest_message_by_name(messages: list, name: str):
+    for msg in reversed(messages):
+        if msg.name == name:
+            return msg
+    logger.warning(
+        f"Message from agent '{name}' not found in portfolio_management_agent.")
+    # Return a dummy message object or raise an error, depending on desired handling
+    # For now, returning a dummy message to avoid crashing, but content will be None.
+    return HumanMessage(content=json.dumps({"signal": "error", "details": f"Message from {name} not found"}), name=name)
+
+def message_to_dict(msg):
+    """将 LangChain 的 HumanMessage/AIMessage 转换为可序列化字典"""
+    if hasattr(msg, "content"):
+        return {
+            "type": msg.__class__.__name__,
+            "name": getattr(msg, "name", None),
+            "content": msg.content,
+            "additional_kwargs": getattr(msg, "additional_kwargs", {}),
+        }
+    elif isinstance(msg, dict):
+        return msg
+    return str(msg)
+
+def parse_json_signal(signal_str):
+    if not signal_str:
+        return {}  # 空字符串返回空字典
+    try:
+        return json.loads(signal_str)  # 解析 JSON 字符串为字典
+    except json.JSONDecodeError:
+        return {}  # 解析失败也返回空字典
 
 
 def clean_confidence(confidence_str_or_num):

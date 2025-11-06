@@ -23,6 +23,7 @@ from src.agents.state import AgentState
 from src.agents.sentiment import sentiment_agent
 from src.agents.risk_manager import risk_management_agent
 from src.agents.technicals import technical_analyst_agent
+from src.agents.stock_forecast_agent import stock_forecast_agent
 from src.agents.portfolio_manager import portfolio_management_agent
 from src.agents.market_data import market_data_agent
 from src.agents.fundamentals import fundamentals_agent
@@ -31,7 +32,7 @@ from src.agents.researcher_bear import researcher_bear_agent
 from src.agents.debate_room import debate_room_agent
 from src.agents.macro_analyst import macro_analyst_agent
 from src.agents.macro_news_agent import macro_news_agent
-from src.agents.intent_recognition_agent import intent_recognition_agent
+from src.agents.intent_recognition_agent import intent_recognition_agent,chitchat_agent
 
 try:
     from src.utils.structured_terminal import print_structured_output
@@ -69,11 +70,11 @@ def run_hedge_fund(
     }
 
 
-    final_state = app.invoke(initial_state) # 将初始状态传入工作流，触发整个流程运行，返回运行涉及的所有信息
+    final_state = app.invoke(initial_state) # type: ignore # 将初始状态传入工作流，触发整个流程运行，返回运行涉及的所有信息
     print(f"--- 投资策略分析完成 Run ID: {run_id} ---")
 
     if HAS_STRUCTURED_OUTPUT:
-        print_structured_output(final_state)
+        print_structured_output(final_state) # type: ignore
 
     return final_state["messages"][-1]["content"]
 
@@ -86,6 +87,7 @@ workflow = StateGraph(AgentState)
 workflow.add_node("intent_recognition_agent", intent_recognition_agent)
 workflow.add_node("market_data_agent", market_data_agent)
 workflow.add_node("technical_analyst_agent", technical_analyst_agent)
+workflow.add_node("stock_forecast_agent", stock_forecast_agent)
 workflow.add_node("fundamentals_agent", fundamentals_agent)
 workflow.add_node("sentiment_agent", sentiment_agent)
 workflow.add_node("valuation_agent", valuation_agent)
@@ -97,27 +99,18 @@ workflow.add_node("risk_management_agent", risk_management_agent)
 workflow.add_node("macro_analyst_agent", macro_analyst_agent)
 workflow.add_node("portfolio_management_agent", portfolio_management_agent)
 
-
+workflow.add_node("chitchat_agent", chitchat_agent)
 # ==================== 边定义 ====================
 
 # workflow.set_entry_point("market_data_agent")
 
 workflow.set_entry_point("intent_recognition_agent")
-workflow.add_edge("intent_recognition_agent", "market_data_agent")
+# workflow.add_edge("intent_recognition_agent", "market_data_agent")
 
-# workflow.add_conditional_edges(
-#     "intent_recognition_agent",
-#     route_intent,
-#     {
-#         "start_analysis": "market_data_agent", # 路由到分析流程
-#         "chit_chat": "small_talk_agent",       # <--- 新路由: 到闲聊
-#         "wait_for_user_input": END             # 路由到结束 (等待用户)
-#     }
-# )
-# workflow.add_edge("small_talk_agent", END)
 
 # 1. market_data_agent 获取的数据分别传递给 4 个分析 agent 和 1 个分析新闻分析 agent，进行进一步的分析
 workflow.add_edge("market_data_agent", "technical_analyst_agent")
+workflow.add_edge("market_data_agent", "stock_forecast_agent")
 workflow.add_edge("market_data_agent", "fundamentals_agent")
 workflow.add_edge("market_data_agent", "sentiment_agent")
 workflow.add_edge("market_data_agent", "valuation_agent")
@@ -128,10 +121,11 @@ workflow.add_edge("market_data_agent", "macro_analyst_agent")
 # 2. 将4个初步分析计算结果汇总后，分别传递给【多头研究员】和【空头研究员】
 analyst_nodes = [
     "technical_analyst_agent",
+    "stock_forecast_agent",
     "fundamentals_agent",
     "sentiment_agent",
     "valuation_agent",
-    "macro_analyst_agent"
+    # "macro_analyst_agent"
 ]
 workflow.add_edge(analyst_nodes, "researcher_bull_agent")
 workflow.add_edge(analyst_nodes, "researcher_bear_agent")
@@ -144,7 +138,7 @@ workflow.add_edge("debate_room_agent", "risk_management_agent")
 # workflow.add_edge("risk_management_agent", "macro_analyst_agent")
 
 # 5. 将新闻分析和宏观数据分析汇总后传给【资产组合经理】生成报告
-workflow.add_edge(["risk_management_agent", "macro_news_agent"], "portfolio_management_agent")
+workflow.add_edge(["risk_management_agent", "macro_news_agent","macro_analyst_agent"], "portfolio_management_agent")
 
 # 6. 终点为生成投资建议的【资产组合经理】
 workflow.add_edge("portfolio_management_agent", END)
@@ -170,7 +164,7 @@ if __name__ == "__main__":
     _set_if_undefined("LANGSMITH_API_KEY")
     class Args:
         def __init__(self):
-            self.user_input = "我想看看大智慧是否值得投资"
+            self.user_input = "我想看看万向钱潮是否值得投资"
             self.initial_capital = 1000000.0
             self.initial_position = 1000
     args = Args()

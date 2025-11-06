@@ -12,11 +12,13 @@ logger = setup_logger('agent_state')
 def merge_dicts(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     return {**a, **b}
 
+
 # 智能体的状态定义
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add] # 存储智能体间交互的信息的列表（新消息追加到末尾）
     data: Annotated[Dict[str, Any], merge_dicts] # 存储业务核心数据
     metadata: Annotated[Dict[str, Any], merge_dicts] # 存储运行配置信息
+
 
 # 工作流中各个 agent 的工作状态
 def show_workflow_status(agent_name: str, status: str = "processing"):
