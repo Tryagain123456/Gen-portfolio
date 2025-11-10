@@ -3,7 +3,7 @@ import json
 import re
 from datetime import datetime, timedelta
 from typing import Literal
-
+from langchain_core.messages import HumanMessage, AIMessage
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..')) # 假设 main.py 在 src 目录下
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
@@ -138,13 +138,15 @@ def chitchat_agent(state: AgentState) -> ChitchatResponse:
         "content": f"请根据以下文字进行回复：\n\n{user_input}"
     }
 
-    structured_llm = llm.with_structured_output(ChitchatResponse)  
-    # result = get_chat_completion([system_message, user_message])
-    result = structured_llm.invoke([system_message, user_message])
+    # structured_llm = llm.with_structured_output(ChitchatResponse)  
+    result = get_chat_completion([system_message, user_message])
+    # result = structured_llm.invoke([system_message, user_message])
     if show_reasoning:
-        show_agent_reasoning(result.get("response"), "Chitchat Agent")
+        show_agent_reasoning(result, "Chitchat Agent")
 
     show_workflow_status("Chitchat Agent", "completed")
 
-    return ChitchatResponse(response=result.get("response", ""))
+    return {
+        "message": state["messages"] + [AIMessage(content=result)] # type: ignore
+    }
 
