@@ -1,5 +1,3 @@
-<div align="center">
-
 # 🤖 投资智能分析助手 (Gen_Portfolio)
 
 <img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
