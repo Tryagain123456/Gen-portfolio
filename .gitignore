@@ -73,7 +73,13 @@ docs/
 # temp
 temp/
 
+data
 
+output_images_kronos
+
+.chainlit
+
+.files
 
 
 test/
